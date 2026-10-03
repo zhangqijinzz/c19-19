@@ -51,4 +51,59 @@ describe('ExpoSketchViewModel', () => {
     vm.resizeSelected(0, 0);
     expect(vm.state.document.elements[0].width).toBe(before);
   });
+
+  it('lists locateable issues with severity and a default pending status', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.issues.find((item) => item.kind === 'overlap');
+    expect(issue).toBeTruthy();
+    expect(issue?.status).toBe('pending');
+    expect(issue?.elementIds).toContain('stage-1');
+    expect(['high', 'medium', 'low']).toContain(issue?.severity);
+  });
+
+  it('focuses an issue in inspect mode and selects the first involved element', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.issues.find((item) => item.kind === 'overlap');
+    vm.focusIssue(issue!.id);
+    expect(vm.state.activeIssueId).toBe(issue!.id);
+    expect(vm.state.mode).toBe('inspect');
+    expect(issue!.elementIds).toContain(vm.state.selectedId);
+  });
+
+  it('stores a confirmation and resets it to pending once an involved element moves again', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.issues.find((item) => item.kind === 'overlap');
+    vm.setIssueStatus(issue!.id, 'confirmed');
+    expect(vm.state.analysis.issues.find((item) => item.id === issue!.id)?.status).toBe('confirmed');
+    vm.moveElement('stage-1', 4.8, 2.6);
+    expect(vm.state.analysis.issues.find((item) => item.id === issue!.id)?.status).toBe('pending');
+  });
+
+  it('resets bounds conclusions after the field size changes', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    const boundsId = vm.state.analysis.issues.find((item) => item.kind === 'bounds')?.id;
+    expect(boundsId).toBeUndefined();
+    vm.resizeField(13, 10);
+    const newBounds = vm.state.analysis.issues.find((item) => item.kind === 'bounds');
+    expect(newBounds).toBeTruthy();
+    vm.setIssueStatus(newBounds!.id, 'ignored');
+    expect(vm.state.analysis.issues.find((item) => item.id === newBounds!.id)?.status).toBe('ignored');
+    vm.resizeField(30, 20);
+    expect(vm.state.analysis.issues.some((item) => item.id === newBounds!.id)).toBe(false);
+  });
+
+  it('drops marks and the active selection when an involved element is deleted', () => {
+    const vm = new ExpoSketchViewModel(fakeRepository());
+    vm.moveElement('stage-1', 4.5, 2.5);
+    const issue = vm.state.analysis.issues.find((item) => item.kind === 'overlap');
+    vm.setIssueStatus(issue!.id, 'confirmed');
+    vm.focusIssue(issue!.id);
+    vm.selectElement('stage-1');
+    vm.removeSelected();
+    expect(vm.state.analysis.issues.some((item) => item.id === issue!.id)).toBe(false);
+    expect(vm.state.activeIssueId).toBeNull();
+  });
 });

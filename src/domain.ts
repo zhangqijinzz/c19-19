@@ -6,12 +6,23 @@ import type {
   ElementSpec,
   ExpoElement,
   FieldSize,
+  IssueKind,
+  IssueSeverity,
+  IssueView,
   LayoutDocument,
   PathPreview,
   OverlapIssue,
 } from './types';
 
 export const MIN_CHANNEL = 1.2;
+
+export const OVERLAP_HIGH_AREA = 6;
+export const OVERLAP_MEDIUM_AREA = 2;
+export const BOUNDS_HIGH_OVERFLOW = 1;
+export const BOUNDS_MEDIUM_OVERFLOW = 0.5;
+export const CHANNEL_HIGH_GAP = 0.6;
+export const CHANNEL_MEDIUM_GAP = 0.9;
+export const BOUNDS_EDGE_MARK = 0.45;
 
 export const ELEMENT_SPECS: Record<ElementKind, ElementSpec> = {
   booth: { kind: 'booth', label: '标准展位', eyebrow: 'BOOTH', icon: '▦', color: '#e7f0ff', width: 5, height: 3.5 },
@@ -114,10 +125,151 @@ export const createPathPreview = (elements: ExpoElement[]): PathPreview | null =
   return { points: [start, elbow, end], distance: Number((distance(start, elbow) + distance(elbow, end)).toFixed(1)), fromName: entrance.name, toName: target.name };
 };
 
+const round2 = (value: number) => Number(value.toFixed(2));
+
+export const createIssueId = (kind: IssueKind, elementIds: string[]): string =>
+  `${kind}:${[...elementIds].sort().join('~')}`;
+
+const issueSeverity = (kind: IssueKind, metric: number): IssueSeverity => {
+  if (kind === 'overlap') return metric >= OVERLAP_HIGH_AREA ? 'high' : metric >= OVERLAP_MEDIUM_AREA ? 'medium' : 'low';
+  if (kind === 'bounds') return metric >= BOUNDS_HIGH_OVERFLOW ? 'high' : metric >= BOUNDS_MEDIUM_OVERFLOW ? 'medium' : 'low';
+  return metric <= CHANNEL_HIGH_GAP ? 'high' : metric <= CHANNEL_MEDIUM_GAP ? 'medium' : 'low';
+};
+
+const boxSignature = (element: ExpoElement): string => {
+  const box = getBoundingBox(element);
+  return `${element.id}@${round2(element.x)},${round2(element.y)},${round2(box.width)}x${round2(box.height)}r${normalizeRotation(element.rotation)}`;
+};
+
+const fieldSignature = (field: FieldSize): string => `field=${round2(field.width)}x${round2(field.height)}`;
+
+export const createIssueSignature = (kind: IssueKind, elementIds: string[], elements: ExpoElement[], field: FieldSize): string => {
+  const byId = new Map(elements.map((element) => [element.id, element]));
+  const body = [...elementIds].sort().map((id) => {
+    const element = byId.get(id);
+    return element ? boxSignature(element) : `missing:${id}`;
+  }).join('|');
+  return `${kind}#${fieldSignature(field)}|${body}`;
+};
+
+const pairName = (elementsById: Map<string, ExpoElement>, ids: string[], fallback: string): string => {
+  const names = ids.map((id) => elementsById.get(id)?.name).filter(Boolean);
+  return names.length >= 2 ? `${names[0]} × ${names[1]}` : fallback;
+};
+
+const overlapRect = (a: ReturnType<typeof getBoundingBox>, b: ReturnType<typeof getBoundingBox>) => {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  return { x: left, y: top, width: intersectionSize(a.left, a.right, b.left, b.right), height: intersectionSize(a.top, a.bottom, b.top, b.bottom) };
+};
+
+const channelRect = (a: ReturnType<typeof getBoundingBox>, b: ReturnType<typeof getBoundingBox>) => {
+  const verticalOverlap = intersectionSize(a.top, a.bottom, b.top, b.bottom);
+  const horizontalOverlap = intersectionSize(a.left, a.right, b.left, b.right);
+  if (verticalOverlap > 0) {
+    const gap = a.right <= b.left ? b.left - a.right : a.left - b.right;
+    const x = a.right <= b.left ? a.right : b.right;
+    const top = Math.max(a.top, b.top);
+    return { x, y: top, width: gap, height: verticalOverlap };
+  }
+  const gap = a.bottom <= b.top ? b.top - a.bottom : a.top - b.bottom;
+  const y = a.bottom <= b.top ? a.bottom : b.bottom;
+  const left = Math.max(a.left, b.left);
+  return { x: left, y, width: horizontalOverlap, height: gap };
+};
+
+const boundsRects = (field: FieldSize, element: ExpoElement) => {
+  const box = getBoundingBox(element);
+  const visible = {
+    x: Math.max(0, box.left),
+    y: Math.max(0, box.top),
+    width: intersectionSize(box.left, box.right, 0, field.width),
+    height: intersectionSize(box.top, box.bottom, 0, field.height),
+  };
+  const rects = visible.width > 0 && visible.height > 0 ? [visible] : [];
+  const mark = BOUNDS_EDGE_MARK;
+  const spans = [box.left, box.right, box.top, box.bottom];
+  if (box.left < 0) rects.push({ x: 0, y: Math.max(0, box.top), width: mark, height: Math.min(box.height, field.height) });
+  if (box.right > field.width) rects.push({ x: field.width - mark, y: Math.max(0, box.top), width: mark, height: Math.min(box.height, field.height) });
+  if (box.top < 0) rects.push({ x: Math.max(0, box.left), y: 0, width: Math.min(box.width, field.width), height: mark });
+  if (box.bottom > field.height) rects.push({ x: Math.max(0, box.left), y: field.height - mark, width: Math.min(box.width, field.width), height: mark });
+  return { rects, spans };
+};
+
+export const buildIssueViews = (document: LayoutDocument): IssueView[] => {
+  const { field, elements } = document;
+  const byId = new Map(elements.map((element) => [element.id, element]));
+  const boxes = new Map(elements.map((element) => [element.id, getBoundingBox(element)]));
+  const issues: IssueView[] = [];
+
+  findOverlaps(elements).forEach((issue) => {
+    const ids = [issue.firstId, issue.secondId];
+    const firstBox = boxes.get(issue.firstId);
+    const secondBox = boxes.get(issue.secondId);
+    const rects = firstBox && secondBox ? [overlapRect(firstBox, secondBox)] : [];
+    issues.push({
+      id: createIssueId('overlap', ids),
+      kind: 'overlap',
+      severity: issueSeverity('overlap', issue.amount),
+      title: '元素重叠',
+      detail: `${pairName(byId, ids, '两个元素')} 占用范围相交`,
+      metric: issue.amount,
+      metricLabel: `${issue.amount.toFixed(1)} m²`,
+      elementIds: ids,
+      highlightRects: rects,
+      signature: createIssueSignature('overlap', ids, elements, field),
+      status: 'pending',
+    });
+  });
+
+  findBoundsIssues(field, elements).forEach((issue) => {
+    const element = byId.get(issue.elementId);
+    if (!element) return;
+    const { rects, spans } = boundsRects(field, element);
+    const sides = [`左边界外 ${(0 - spans[0]).toFixed(1)} m`, `右边界外 ${(spans[1] - field.width).toFixed(1)} m`, `上边界外 ${(0 - spans[2]).toFixed(1)} m`, `下边界外 ${(spans[3] - field.height).toFixed(1)} m`].filter((_, index) => [spans[0] < 0, spans[1] > field.width, spans[2] < 0, spans[3] > field.height][index]);
+    issues.push({
+      id: createIssueId('bounds', [issue.elementId]),
+      kind: 'bounds',
+      severity: issueSeverity('bounds', issue.overflow),
+      title: '超出场地边界',
+      detail: `${element.name}${sides.length ? ` · ${sides.join('，')}` : ' 超出场地'}`,
+      metric: issue.overflow,
+      metricLabel: `${issue.overflow.toFixed(1)} m`,
+      elementIds: [issue.elementId],
+      highlightRects: rects,
+      signature: createIssueSignature('bounds', [issue.elementId], elements, field),
+      status: 'pending',
+    });
+  });
+
+  findNarrowChannels(elements).forEach((issue) => {
+    const ids = [issue.firstId, issue.secondId];
+    const firstBox = boxes.get(issue.firstId);
+    const secondBox = boxes.get(issue.secondId);
+    const rects = firstBox && secondBox ? [channelRect(firstBox, secondBox)] : [];
+    issues.push({
+      id: createIssueId('channel', ids),
+      kind: 'channel',
+      severity: issueSeverity('channel', issue.gap),
+      title: '通道过窄',
+      detail: `${pairName(byId, ids, '两个元素')} 间距小于 ${MIN_CHANNEL} m 通道要求`,
+      metric: issue.gap,
+      metricLabel: `${issue.gap.toFixed(1)} m`,
+      elementIds: ids,
+      highlightRects: rects,
+      signature: createIssueSignature('channel', ids, elements, field),
+      status: 'pending',
+    });
+  });
+
+  return issues;
+};
+
 export const analyzeLayout = (document: LayoutDocument): Analysis => ({
   overlaps: findOverlaps(document.elements),
   bounds: findBoundsIssues(document.field, document.elements),
   channels: findNarrowChannels(document.elements),
+  issues: buildIssueViews(document),
   path: createPathPreview(document.elements),
 });
 

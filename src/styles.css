@@ -108,3 +108,74 @@ button { cursor: pointer; }
 .analysis-panel { display: grid; grid-template-columns: 1.15fr 1.4fr 1.8fr; align-items: center; gap: 20px; min-height: 58px; margin-top: 14px; padding: 12px 17px; border: 1px solid #e7ecf1; border-radius: 11px; background: #fff; box-shadow: 0 5px 16px #2b41620a; }.analysis-title { display: flex; align-items: center; gap: 9px; }.analysis-pulse { width: 8px; height: 8px; border-radius: 50%; background: #5cc49b; box-shadow: 0 0 0 4px #def5ea; }.analysis-path .analysis-pulse { background: #ef795f; box-shadow: 0 0 0 4px #fce8e3; }.analysis-title strong, .analysis-title .section-kicker { display: block; }.analysis-title strong { margin-top: 3px; color: #52667a; font: 600 11px 'Space Grotesk'; }.analysis-metrics { display: flex; gap: 14px; color: #a1adb8; font: 9px 'DM Mono'; }.analysis-metrics span { white-space: nowrap; }.analysis-metrics b { margin-right: 3px; color: #5f7487; font-weight: 500; }.analysis-metrics .metric-warning b { color: #db8a48; }.analysis-result { display: grid; gap: 3px; justify-self: end; text-align: right; }.analysis-result strong { color: #5b6e80; font-size: 10px; font-weight: 600; }.analysis-result small { color: #aab4bd; font: 9px 'DM Mono'; }
 .loading-screen { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 9px; background: #f6f8fb; color: #738294; }.loading-mark { width: 45px; height: 45px; display: grid; place-items: center; margin-bottom: 7px; border-radius: 14px; background: #ef795f; color: #fff; font-size: 22px; box-shadow: 0 9px 20px #ef795f38; }.loading-screen strong { color: #36495d; font: 600 16px 'Space Grotesk'; }.loading-screen span { color: #a4afb9; font-size: 11px; }
 @media (max-width: 1260px) { .left-rail { width: 250px; flex-basis: 250px; }.main-stage { padding: 0 24px; }.editor-grid { grid-template-columns: minmax(560px, 1fr) 235px; gap: 13px; }.bottom-meta { display: none; } }
+
+/* 空间检查清单 */
+.analysis-panel.is-checklist { display: block; padding: 14px 17px 12px; }
+.checklist-head { display: flex; align-items: center; gap: 20px; }
+.checklist-head .analysis-metrics { margin-left: 4px; }
+.analysis-pulse.has-pending { background: #e8ae58; box-shadow: 0 0 0 4px #fbeed9; }
+.checklist-summary { margin-left: auto; display: grid; gap: 3px; text-align: right; }
+.checklist-summary strong { color: #5b6e80; font: 600 11px 'Space Grotesk'; }
+.checklist-summary small { color: #aab4bd; font: 9px 'DM Mono'; }
+.checklist-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 12px; padding-top: 11px; border-top: 1px solid #eef1f4; }
+.filter-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid #e4e9ee; border-radius: 20px; background: #fbfcfe; color: #8c99a6; font-size: 10px; }
+.chip b { min-width: 14px; padding: 1px 4px; border-radius: 7px; background: #eef2f6; color: #93a0ad; font: 8px 'DM Mono'; text-align: center; }
+.chip.active { border-color: #ef795f; background: #fff5f1; color: #e06f55; }
+.chip.active b { background: #ef795f; color: #fff; }
+.toolbar-right { display: flex; align-items: center; gap: 10px; }
+.filter-select { display: flex; align-items: center; gap: 6px; color: #9aa6b2; font-size: 10px; }
+.filter-select select { padding: 4px 7px; border: 1px solid #e4e9ee; border-radius: 7px; background: #fcfdfe; color: #5d7082; font-size: 10px; outline: 0; }
+.sort-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #f4f6f8; }
+.sort-tabs button { padding: 4px 9px; border: 0; border-radius: 6px; background: transparent; color: #a3adb8; font-size: 9px; }
+.sort-tabs button.active { background: #fff; color: #53667b; box-shadow: 0 2px 7px #2b41620f; }
+.issue-list { display: grid; gap: 6px; max-height: 228px; margin: 11px 0 0; padding: 0 2px 2px; overflow-y: auto; list-style: none; }
+.issue-row { display: flex; align-items: stretch; border: 1px solid #e8edf3; border-radius: 10px; background: #fff; overflow: hidden; transition: border-color .15s, box-shadow .15s, opacity .15s; }
+.issue-row.severity-high { border-left: 3px solid #e86b58; }
+.issue-row.severity-medium { border-left: 3px solid #e5ae58; }
+.issue-row.severity-low { border-left: 3px solid #8fb4d9; }
+.issue-row.is-active { border-color: #ef795f; box-shadow: 0 0 0 2px #ef795f2e, 0 5px 14px #2b416212; }
+.issue-row.status-confirmed { background: #f7fbf9; }
+.issue-row.status-ignored { opacity: .55; }
+.issue-main { flex: 1; display: flex; align-items: center; gap: 11px; min-width: 0; padding: 9px 12px; border: 0; background: transparent; text-align: left; }
+.issue-badge { flex: 0 0 auto; min-width: 34px; padding: 4px 6px; border-radius: 7px; text-align: center; color: #fff; font: 600 9px 'Space Grotesk'; }
+.issue-badge.kind-overlap { background: #e86b58; }
+.issue-badge.kind-bounds { background: #e5913f; }
+.issue-badge.kind-channel { background: #dca94c; }
+.issue-copy { min-width: 0; display: grid; gap: 3px; }
+.issue-copy strong { display: flex; align-items: center; gap: 7px; color: #43566a; font: 600 11px 'Space Grotesk'; }
+.issue-copy small { display: block; overflow: hidden; color: #9aa6b2; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.severity-tag, .status-tag { padding: 1px 6px; border-radius: 6px; font: 500 8px 'DM Mono'; font-style: normal; }
+.severity-tag.high { background: #fce8e3; color: #d85a44; }
+.severity-tag.medium { background: #fbf1de; color: #bd8528; }
+.severity-tag.low { background: #e9f1f8; color: #5f89b0; }
+.status-tag { background: #eef2f6; color: #93a0ad; }
+.status-tag.confirmed { background: #def5ea; color: #3f9d74; }
+.status-tag.ignored { background: #f0f2f5; color: #a6b0ba; }
+.issue-metric { margin-left: auto; flex: 0 0 auto; color: #5f7487; font: 500 11px 'DM Mono'; }
+.issue-locate { flex: 0 0 auto; padding: 4px 9px; border: 1px solid #e4e9ee; border-radius: 7px; color: #ef795f; font-size: 9px; white-space: nowrap; }
+.issue-row.is-active .issue-locate { border-color: #ef795f; background: #fff5f1; }
+.issue-actions { display: flex; flex-direction: column; gap: 4px; padding: 8px 9px; border-left: 1px solid #eef1f4; }
+.issue-actions button { padding: 3px 8px; border: 1px solid #e4e9ee; border-radius: 6px; background: #fcfdfe; color: #93a0ad; font-size: 9px; white-space: nowrap; }
+.issue-actions button:hover { color: #e06f55; border-color: #f1b7ab; background: #fff8f6; }
+.issue-actions button.active { color: #3f9d74; border-color: #9fd8c0; background: #f0faf5; }
+.issue-empty { margin-top: 11px; padding: 18px; border: 1px dashed #e2e8ee; border-radius: 10px; background: #fbfcfe; color: #a3adb8; font-size: 11px; text-align: center; }
+.checklist-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 11px; padding-top: 9px; border-top: 1px solid #eef1f4; }
+.path-preview { display: flex; align-items: center; gap: 6px; color: #aab4bd; font: 9px 'DM Mono'; }
+.path-preview i { width: 6px; height: 6px; border-radius: 50%; background: #ef795f; }
+.checklist-foot > small { color: #c0c8d0; font-size: 9px; }
+
+/* 平面图上的定位高亮 */
+.issue-highlight-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; overflow: visible; }
+.issue-highlight-layer .highlight-rect { vector-effect: non-scaling-stroke; stroke-width: 2.5; }
+.issue-highlight-layer .highlight-rect.primary { fill: #ef795f33; stroke: #ef795f; stroke-dasharray: 9 5; animation: highlight-pulse 1.4s ease-in-out infinite; }
+.issue-highlight-layer.kind-channel .highlight-rect.primary { fill: #e5ae5844; stroke: #e5ae58; }
+.issue-highlight-layer.kind-bounds .highlight-rect.primary { fill: #e86b5826; stroke: #e86b58; }
+.issue-highlight-layer .highlight-rect.edge-mark { fill: #e86b5855; stroke: #e86b58; }
+@keyframes highlight-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.canvas-element.is-issue-involved { z-index: 5; border: 2px solid #ef795f; box-shadow: 0 0 0 4px #ef795f33, 0 6px 16px #4d627330; }
+.active-issue-tag { position: absolute; top: 3%; right: 2%; z-index: 6; display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 8px; background: #182735e6; color: #fff; pointer-events: none; }
+.active-issue-tag b { font: 600 9px 'Space Grotesk'; }
+.active-issue-tag span { color: #ffc9b8; font: 9px 'DM Mono'; }
+.legend-dot.ring { border: 1.5px solid #ef795f; background: #ef795f33; border-radius: 2px; }
+

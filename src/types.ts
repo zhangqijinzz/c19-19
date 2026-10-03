@@ -29,6 +29,7 @@ export interface LayoutDocument {
   title: string;
   field: FieldSize;
   elements: ExpoElement[];
+  issueMarks?: IssueMarkRecord[];
 }
 
 export interface ElementSpec {
@@ -65,10 +66,42 @@ export interface PathPreview {
   toName: string;
 }
 
+export type IssueKind = 'overlap' | 'bounds' | 'channel';
+export type IssueSeverity = 'high' | 'medium' | 'low';
+export type IssueStatus = 'pending' | 'confirmed' | 'ignored';
+
+export interface IssueMarkRecord {
+  id: string;
+  status: Exclude<IssueStatus, 'pending'>;
+  signature: string;
+}
+
+export interface IssueRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface IssueView {
+  id: string;
+  kind: IssueKind;
+  severity: IssueSeverity;
+  title: string;
+  detail: string;
+  metric: number;
+  metricLabel: string;
+  elementIds: string[];
+  highlightRects: IssueRect[];
+  signature: string;
+  status: IssueStatus;
+}
+
 export interface Analysis {
   overlaps: OverlapIssue[];
   bounds: BoundsIssue[];
   channels: ChannelIssue[];
+  issues: IssueView[];
   path: PathPreview | null;
 }
 
