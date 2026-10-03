@@ -72,6 +72,41 @@ export interface Analysis {
   path: PathPreview | null;
 }
 
+export type IssueType = 'overlap' | 'bounds' | 'channel';
+export type IssueSeverity = 'high' | 'medium' | 'low';
+export type IssueStatus = 'pending' | 'confirmed' | 'deferred';
+export type IssueDecision = 'confirmed' | 'deferred';
+export type IssueSort = 'severity' | 'type';
+
+export interface IssueHighlight {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface AnalysisIssue {
+  id: string;
+  type: IssueType;
+  severity: IssueSeverity;
+  elementIds: string[];
+  summary: string;
+  metricLabel: string;
+  metric: number;
+  fingerprint: string;
+  highlight: IssueHighlight | null;
+}
+
+export interface IssueEntry extends AnalysisIssue {
+  status: IssueStatus;
+}
+
+export interface IssueResolution {
+  status: IssueDecision;
+  fingerprint: string;
+  decidedAt: number;
+}
+
 export interface Notice {
   tone: 'info' | 'success' | 'warning' | 'error';
   message: string;

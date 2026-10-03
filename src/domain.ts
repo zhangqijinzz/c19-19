@@ -1,11 +1,17 @@
 import type {
   Analysis,
+  AnalysisIssue,
   BoundsIssue,
   ChannelIssue,
   ElementKind,
   ElementSpec,
   ExpoElement,
   FieldSize,
+  IssueEntry,
+  IssueResolution,
+  IssueSeverity,
+  IssueSort,
+  IssueType,
   LayoutDocument,
   PathPreview,
   OverlapIssue,
@@ -124,3 +130,110 @@ export const analyzeLayout = (document: LayoutDocument): Analysis => ({
 export const findElement = (document: LayoutDocument, id: string | null) => document.elements.find((element) => element.id === id) ?? null;
 
 export const formatArea = (field: FieldSize) => `${field.width} × ${field.height} m`;
+
+const pairKey = (firstId: string, secondId: string) => [firstId, secondId].sort().join('::');
+
+const overlapSeverity = (amount: number): IssueSeverity => (amount >= 4 ? 'high' : amount >= 1.5 ? 'medium' : 'low');
+const boundsSeverity = (overflow: number): IssueSeverity => (overflow >= 2 ? 'high' : overflow >= 0.8 ? 'medium' : 'low');
+const channelSeverity = (gap: number): IssueSeverity => (gap <= 0.4 ? 'high' : gap <= 0.8 ? 'medium' : 'low');
+
+const elementFingerprint = (element: ExpoElement) => `${element.id}#${element.x},${element.y},${element.width},${element.height},${element.rotation}`;
+
+const buildFingerprint = (type: IssueType, elementIds: string[], document: LayoutDocument): string => {
+  const parts = elementIds.map((id) => {
+    const element = findElement(document, id);
+    return element ? elementFingerprint(element) : `${id}#missing`;
+  }).sort();
+  if (type === 'bounds') parts.push(`field#${document.field.width}x${document.field.height}`);
+  return parts.join('|');
+};
+
+export const buildIssues = (document: LayoutDocument, analysis: Analysis): AnalysisIssue[] => {
+  const issues: AnalysisIssue[] = [];
+  for (const overlap of analysis.overlaps) {
+    const first = findElement(document, overlap.firstId);
+    const second = findElement(document, overlap.secondId);
+    if (!first || !second) continue;
+    const firstBox = getBoundingBox(first);
+    const secondBox = getBoundingBox(second);
+    const left = Math.max(firstBox.left, secondBox.left);
+    const top = Math.max(firstBox.top, secondBox.top);
+    issues.push({
+      id: `overlap:${pairKey(overlap.firstId, overlap.secondId)}`,
+      type: 'overlap',
+      severity: overlapSeverity(overlap.amount),
+      elementIds: [overlap.firstId, overlap.secondId],
+      summary: `「${first.name}」与「${second.name}」重叠`,
+      metricLabel: `重叠 ${overlap.amount.toFixed(1)} m²`,
+      metric: overlap.amount,
+      fingerprint: buildFingerprint('overlap', [overlap.firstId, overlap.secondId], document),
+      highlight: { left, top, width: Math.min(firstBox.right, secondBox.right) - left, height: Math.min(firstBox.bottom, secondBox.bottom) - top },
+    });
+  }
+  for (const bounds of analysis.bounds) {
+    const element = findElement(document, bounds.elementId);
+    if (!element) continue;
+    const box = getBoundingBox(element);
+    issues.push({
+      id: `bounds:${bounds.elementId}`,
+      type: 'bounds',
+      severity: boundsSeverity(bounds.overflow),
+      elementIds: [bounds.elementId],
+      summary: `「${element.name}」超出场地边界`,
+      metricLabel: `越界 ${bounds.overflow.toFixed(1)} m`,
+      metric: bounds.overflow,
+      fingerprint: buildFingerprint('bounds', [bounds.elementId], document),
+      highlight: { left: box.left, top: box.top, width: box.width, height: box.height },
+    });
+  }
+  for (const channel of analysis.channels) {
+    const first = findElement(document, channel.firstId);
+    const second = findElement(document, channel.secondId);
+    if (!first || !second) continue;
+    const firstBox = getBoundingBox(first);
+    const secondBox = getBoundingBox(second);
+    const verticalOverlap = intersectionSize(firstBox.top, firstBox.bottom, secondBox.top, secondBox.bottom);
+    const horizontalOverlap = intersectionSize(firstBox.left, firstBox.right, secondBox.left, secondBox.right);
+    const highlight = verticalOverlap > 0
+      ? { left: Math.min(firstBox.right, secondBox.right), top: Math.max(firstBox.top, secondBox.top), width: channel.gap, height: verticalOverlap }
+      : { left: Math.max(firstBox.left, secondBox.left), top: Math.min(firstBox.bottom, secondBox.bottom), width: horizontalOverlap, height: channel.gap };
+    issues.push({
+      id: `channel:${pairKey(channel.firstId, channel.secondId)}`,
+      type: 'channel',
+      severity: channelSeverity(channel.gap),
+      elementIds: [channel.firstId, channel.secondId],
+      summary: `「${first.name}」与「${second.name}」之间通道过窄`,
+      metricLabel: `净宽 ${channel.gap.toFixed(1)} m`,
+      metric: Number((MIN_CHANNEL - channel.gap).toFixed(2)),
+      fingerprint: buildFingerprint('channel', [channel.firstId, channel.secondId], document),
+      highlight,
+    });
+  }
+  return issues;
+};
+
+export const reconcileIssues = (
+  issues: AnalysisIssue[],
+  resolutions: Record<string, IssueResolution>,
+): { entries: IssueEntry[]; resolutions: Record<string, IssueResolution> } => {
+  const nextResolutions: Record<string, IssueResolution> = {};
+  const entries = issues.map((issue) => {
+    const resolution = resolutions[issue.id];
+    if (resolution && resolution.fingerprint === issue.fingerprint) {
+      nextResolutions[issue.id] = resolution;
+      return { ...issue, status: resolution.status };
+    }
+    return { ...issue, status: 'pending' as const };
+  });
+  return { entries, resolutions: nextResolutions };
+};
+
+const SEVERITY_RANK: Record<IssueSeverity, number> = { high: 0, medium: 1, low: 2 };
+const TYPE_RANK: Record<IssueType, number> = { overlap: 0, bounds: 1, channel: 2 };
+
+export const sortIssues = <T extends AnalysisIssue>(issues: T[], sort: IssueSort): T[] =>
+  [...issues].sort((a, b) => {
+    const primary = sort === 'severity' ? SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] : TYPE_RANK[a.type] - TYPE_RANK[b.type];
+    const secondary = sort === 'severity' ? TYPE_RANK[a.type] - TYPE_RANK[b.type] : SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+    return primary || secondary || b.metric - a.metric || a.id.localeCompare(b.id);
+  });

@@ -1,6 +1,6 @@
-import { createElement, createStarterDocument, analyzeLayout, findElement, getBoundingBox, normalizeRotation } from './domain';
+import { createElement, createStarterDocument, analyzeLayout, buildIssues, findElement, getBoundingBox, normalizeRotation, reconcileIssues, sortIssues } from './domain';
 import type { LayoutRepository } from './repository';
-import type { Analysis, ElementKind, LayoutDocument, LayoutMode, Notice, RenderElement, ViewPhase } from './types';
+import type { Analysis, ElementKind, IssueDecision, IssueEntry, IssueResolution, IssueSort, LayoutDocument, LayoutMode, Notice, RenderElement, ViewPhase } from './types';
 
 export interface ExpoSketchState {
   phase: ViewPhase;
@@ -10,6 +10,11 @@ export interface ExpoSketchState {
   selectedElement: RenderElement | null;
   mode: LayoutMode;
   analysis: Analysis;
+  issues: IssueEntry[];
+  issueSort: IssueSort;
+  focusedIssueId: string | null;
+  focusedIssue: IssueEntry | null;
+  issueResolutions: Record<string, IssueResolution>;
   notice: Notice;
   lastSavedAt: number | null;
 }
@@ -21,6 +26,8 @@ const toRenderElements = (document: LayoutDocument): RenderElement[] => document
 
 const starter = createStarterDocument();
 const starterRenderElements = toRenderElements(starter);
+const starterAnalysis = analyzeLayout(starter);
+const starterIssues = sortIssues(reconcileIssues(buildIssues(starter, starterAnalysis), {}).entries, 'severity');
 
 type Listener = () => void;
 
@@ -33,7 +40,12 @@ export class ExpoSketchViewModel {
     selectedId: 'stage-1',
     selectedElement: starterRenderElements.find((element) => element.id === 'stage-1') ?? null,
     mode: 'edit',
-    analysis: analyzeLayout(createStarterDocument()),
+    analysis: starterAnalysis,
+    issues: starterIssues,
+    issueSort: 'severity',
+    focusedIssueId: null,
+    focusedIssue: null,
+    issueResolutions: {},
     notice: { tone: 'info', message: '正在恢复最近布局…' },
     lastSavedAt: null,
   };
@@ -57,6 +69,28 @@ export class ExpoSketchViewModel {
   }
 
   selectElement(id: string) { this.commit({ selectedId: id }); }
+
+  focusIssue(id: string | null) {
+    if (id !== null && !this.stateValue.issues.some((issue) => issue.id === id)) return;
+    if (this.stateValue.focusedIssueId === id) return;
+    this.commit({ focusedIssueId: id });
+  }
+
+  setIssueSort(issueSort: IssueSort) { this.commit({ issueSort }); }
+
+  resolveIssue(id: string, decision: IssueDecision) {
+    const issue = this.stateValue.issues.find((item) => item.id === id);
+    if (!issue) return;
+    const issueResolutions = { ...this.stateValue.issueResolutions, [id]: { status: decision, fingerprint: issue.fingerprint, decidedAt: Date.now() } };
+    this.commit({ issueResolutions, notice: { tone: 'success', message: decision === 'confirmed' ? `已确认：${issue.summary}` : `已暂缓：${issue.summary}` } });
+  }
+
+  reopenIssue(id: string) {
+    if (!this.stateValue.issueResolutions[id]) return;
+    const issueResolutions = { ...this.stateValue.issueResolutions };
+    delete issueResolutions[id];
+    this.commit({ issueResolutions, notice: { tone: 'info', message: '已恢复为待处理' } });
+  }
 
   setMode(mode: LayoutMode) { this.commit({ mode, notice: { tone: 'info', message: mode === 'inspect' ? '检查模式已开启：拖动元素查看即时提示' : mode === 'path' ? '路径模式已开启：入口到重点区域的访问路线已生成' : '编辑模式已开启' } }); }
 
@@ -111,7 +145,7 @@ export class ExpoSketchViewModel {
 
   resetExample() {
     const document = createStarterDocument();
-    this.commitAndPersist({ document, selectedId: 'stage-1', mode: 'edit', notice: { tone: 'success', message: '已恢复示例布局' } });
+    this.commitAndPersist({ document, selectedId: 'stage-1', mode: 'edit', focusedIssueId: null, issueResolutions: {}, notice: { tone: 'success', message: '已恢复示例布局' } });
   }
 
   private commitAndPersist(patch: Partial<ExpoSketchState>) {
@@ -131,7 +165,20 @@ export class ExpoSketchViewModel {
   private commit(patch: Partial<ExpoSketchState>) {
     const next = { ...this.stateValue, ...patch };
     const renderElements = toRenderElements(next.document);
-    this.stateValue = { ...next, renderElements, selectedElement: renderElements.find((element) => element.id === next.selectedId) ?? null, analysis: analyzeLayout(next.document) };
+    const analysis = analyzeLayout(next.document);
+    const { entries, resolutions } = reconcileIssues(buildIssues(next.document, analysis), next.issueResolutions);
+    const issues = sortIssues(entries, next.issueSort);
+    const focusedIssue = issues.find((issue) => issue.id === next.focusedIssueId) ?? null;
+    this.stateValue = {
+      ...next,
+      renderElements,
+      selectedElement: renderElements.find((element) => element.id === next.selectedId) ?? null,
+      analysis,
+      issues,
+      issueResolutions: resolutions,
+      focusedIssueId: focusedIssue ? focusedIssue.id : null,
+      focusedIssue,
+    };
     this.listeners.forEach((listener) => listener());
   }
 }
